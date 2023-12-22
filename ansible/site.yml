@@ -1,0 +1,11 @@
+---
+- hosts: all
+  become: true
+  roles:
+    - role: update_packages
+      tags: upgrade
+
+    - role: install_haproxy
+      tags: haproxy
+  vars_files:
+    - ./vars.yml

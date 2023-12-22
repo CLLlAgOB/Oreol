@@ -1,0 +1,16 @@
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl
+.vagrant
+**/key.json
+/HIDE/
+**/kube-prometheus-main/*
+*id_rsa*
+vars.yml
+inventory.ini
+/wingetcert/

@@ -1,0 +1,22 @@
+---
+- name: Update and upgrade apt packages
+  become: true
+  apt:
+    update_cache: yes
+    upgrade: 'yes'
+
+- name: Проверить файл reboot-required
+  stat:
+    path: /var/run/reboot-required
+  register: reboot_required
+
+- name: Вывести сообщение о перезагрузке (если требуется)
+  debug:
+    msg: "Системе требуется перезагрузка."
+  when: reboot_required.stat.exists
+
+- name: Reboot if kernel is updated
+  reboot:
+    connect_timeout: 120
+  become: true
+  when: reboot_required.stat.exists

@@ -1,0 +1,108 @@
+global
+    log /dev/log    local0
+    log /dev/log    local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+    # Default SSL material locations
+    ca-base /etc/ssl/certs
+    crt-base /etc/ssl/private
+    # See: https://ssl-config.mozilla.org/#server=haproxy&server-version=2.0.3&config=intermediate
+    ssl-default-bind-ciphersuites TLS_AES_256_GCM_SHA384:TLS_AES_128_GCM_SHA256:TLS_CHACHA20_POLY1305_SHA256
+    # Убрать слабые шифры TLS 1.2
+    ssl-default-bind-ciphers ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256
+    #ssl-default-bind-options ssl-min-ver TLSv1.2 no-tls-tickets
+    ssl-default-bind-options no-sslv3
+    ssl-server-verify none
+
+defaults
+    log     global
+    mode    http
+    option  httplog
+    option  dontlognull
+    timeout connect 5000
+    timeout client  15m
+    timeout server  15m
+    errorfile 400 /etc/haproxy/errors/400.http
+    errorfile 403 /etc/haproxy/errors/403.http
+    errorfile 408 /etc/haproxy/errors/408.http
+    errorfile 500 /etc/haproxy/errors/500.http
+    errorfile 502 /etc/haproxy/errors/502.http
+    errorfile 503 /etc/haproxy/errors/503.http
+    errorfile 504 /etc/haproxy/errors/504.http
+
+frontend fe_http
+    bind *:80
+    mode http
+    log global
+    option httplog
+    timeout client 300s
+    maxconn 10
+    acl rdweb_domain hdr(host) -i beg {{ haproxy_dns }}
+    http-request deny deny_status 400 if !rdweb_domain
+    default_backend be_rdp_tsc_80
+
+frontend fe_rdp_tsc
+    bind *:443 ssl crt {{ haproxy_cert }}
+    mode http
+    capture request header Host len 32
+    log global
+    option httplog
+    timeout client 300s
+    maxconn 300
+    stick-table type ip size 1k expire 15s store gpc0
+    tcp-request connection track-sc0 src
+    tcp-request connection reject if { sc0_get_gpc0 gt 0 }
+    acl rdweb_domain hdr(host) -i beg {{ haproxy_dns }}
+    http-request deny deny_status 400 if !rdweb_domain
+    default_backend be_rdp_tsc
+
+backend be_rdp_tsc
+    balance source
+    mode http
+    log global
+    stick-table type ip size 1k expire 15s store http_err_rate(10s)
+    acl errors_too_fast sc1_http_err_rate gt 8
+    acl mark_as_abuser sc0_inc_gpc0(fe_rdp_tsc) gt 0
+    acl clear_as_abuser sc0_clr_gpc0(fe_rdp_tsc) ge 0
+    tcp-request content track-sc1 src
+    tcp-request content reject if errors_too_fast mark_as_abuser
+    tcp-request content accept if !errors_too_fast clear_as_abuser
+    option forwardfor
+    http-request set-header X-Client-IP %[src]
+    #http-request replace-value Host .* {{ haproxy_dns }}
+    #option httpchk GET /check/index.htm
+    cookie RDPWEB insert nocache
+    default-server inter 3s rise 2 fall 3
+    server rdgw01 {{ haproxy_ip_1 }}:443 maxconn 100 weight 10 ssl check cookie rdgw01
+    server rdgw02 {{ haproxy_ip_2 }}:443 maxconn 100 weight 10 ssl check cookie rdgw02 backup
+
+backend be_rdp_tsc_80
+    mode http
+    log global
+    stick-table type ip size 1k expire 15s store http_err_rate(10s)
+    acl errors_too_fast sc1_http_err_rate gt 8
+    acl mark_as_abuser sc0_inc_gpc0(fe_rdp_tsc) gt 0
+    acl clear_as_abuser sc0_clr_gpc0(fe_rdp_tsc) ge 0
+    tcp-request content track-sc1 src
+    tcp-request content reject if errors_too_fast mark_as_abuser
+    tcp-request content accept if !errors_too_fast clear_as_abuser
+    option forwardfor
+    http-request set-header X-Client-IP %[src]
+    #option httpchk GET /check/index.htm
+    cookie RDPWEB insert nocache
+    default-server inter 3s rise 2 fall 3
+    server rdgw01 {{ haproxy_ip_1 }}:80 maxconn 10 cookie rdgw01
+
+frontend fe_stats
+    mode http
+    bind *:{{ haproxy_port }}
+    acl ip_allow_admin src {{ haproxy_ip_3 }} {{ haproxy_ip_1 }} {{ haproxy_ip_2 }} {{ haproxy_ip_4 }}
+    stats enable
+    stats uri /stats
+    stats refresh 30s
+    #stats admin if LOCALHOST
+    stats admin if ip_allow_admin

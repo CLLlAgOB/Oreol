@@ -17,8 +17,9 @@ variable "allowed_ports" {
   default     = []
 }
 variable "allowed_statport" {
-  description = "Port for HAproxy stat"
-  type        = number
+  description = "Port for HAproxy stat and other ports"
+  type        = list(string)
+  default     = []
 }
 variable "allowed_stat_ip" {
   type        = list(string)

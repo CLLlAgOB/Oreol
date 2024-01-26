@@ -18,11 +18,14 @@ resource "yandex_vpc_security_group" "ha-proxy-sg" {
     }
   }
 
-  ingress {
-    protocol       = "TCP"
-    description    = "Permit for stat"
-    v4_cidr_blocks = var.allowed_stat_ip
-    port           = var.allowed_statport
+  dynamic "ingress" {
+    for_each = var.allowed_statport
+    content {
+      protocol       = "TCP"
+      description    = "Permit for stat and other ports"
+      v4_cidr_blocks = var.allowed_stat_ip
+      port           = ingress.value
+    }
   }
 
   egress {

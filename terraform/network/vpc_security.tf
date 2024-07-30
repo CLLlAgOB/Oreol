@@ -1,6 +1,6 @@
 
 resource "yandex_vpc_security_group" "ha-proxy-sg" {
-  name        = "HaProxy security group"
+  name        = "haproxy-security-group"
   description = "HaProxy security group"
   network_id  = yandex_vpc_network.oreol-vpc.id
 

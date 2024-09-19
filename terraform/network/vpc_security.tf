@@ -28,6 +28,14 @@ resource "yandex_vpc_security_group" "ha-proxy-sg" {
     }
   }
 
+  ingress {
+    protocol       = "ICMP"
+    description    = "Allow ICMP (Ping)"
+    v4_cidr_blocks = var.allowed_stat_ip
+    from_port      = -1
+    to_port        = -1
+  }
+
   egress {
     protocol       = "ANY"
     description    = "Permit ANY"
